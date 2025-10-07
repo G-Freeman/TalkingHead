@@ -245,9 +245,6 @@ export default function App() {
 				<div className="pointer-events-none absolute left-4 top-4 rounded-md bg-black/60 px-3 py-1 text-xs uppercase tracking-wide">
 					{overlayText}
 				</div>
-				<div className="pointer-events-none absolute left-4 bottom-4 rounded-md bg-black/60 px-3 py-1 text-xs text-gray-300">
-					Перетащите .glb/.gltf или .zip на окно, чтобы заменить модель
-				</div>
 			</div>
 		</div>
 	);

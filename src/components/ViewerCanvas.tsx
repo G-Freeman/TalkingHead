@@ -234,24 +234,24 @@ const CameraInfoOverlay = memo(function CameraInfoOverlay({
 
 	return (
 		<Html transform={false} prepend>
-			<div
-				ref={textRef}
-				style={{
-					position: 'absolute',
-					top: '16px',
-					right: '16px',
-					minWidth: '240px',
-					padding: '12px',
-					borderRadius: '8px',
-					background: 'rgba(0, 0, 0, 0.65)',
-					color: '#e2e8f0',
-					fontFamily: 'monospace',
-					fontSize: '12px',
-					lineHeight: 1.5,
-					pointerEvents: 'none',
-					whiteSpace: 'pre'
-				}}
-			/>
+			{/*<div*/}
+			{/*	ref={textRef}*/}
+			{/*	style={{*/}
+			{/*		position: 'absolute',*/}
+			{/*		top: '16px',*/}
+			{/*		right: '16px',*/}
+			{/*		minWidth: '240px',*/}
+			{/*		padding: '12px',*/}
+			{/*		borderRadius: '8px',*/}
+			{/*		background: 'rgba(0, 0, 0, 0.65)',*/}
+			{/*		color: '#e2e8f0',*/}
+			{/*		fontFamily: 'monospace',*/}
+			{/*		fontSize: '12px',*/}
+			{/*		lineHeight: 1.5,*/}
+			{/*		pointerEvents: 'none',*/}
+			{/*		whiteSpace: 'pre'*/}
+			{/*	}}*/}
+			{/*/>*/}
 		</Html>
 	);
 });
