@@ -5,6 +5,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { Box3, CubeTextureLoader, PerspectiveCamera, SRGBColorSpace, Vector3 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { memo, useEffect } from 'react';
+import { createRobotFaceControllers, type RobotFaceController } from './robotFaceController';
 
 interface ViewerCanvasProps {
 	modelUrl: string | null;
@@ -15,23 +16,40 @@ const CAMERA_TARGET: [number, number, number] = [0.526, 0.232, 0.723];
 
 const Model = memo(function Model({ url }: { url: string }) {
 	const gltf = useLoader(GLTFLoader, url);
-	const scene = useMemo(() => {
-		const cloned = gltf.scene.clone(true);
-		const box = new Box3().setFromObject(cloned);
-		const size = new Vector3();
-		const center = new Vector3();
-		box.getSize(size);
-		box.getCenter(center);
-		cloned.position.sub(center);
-		const maxAxis = Math.max(size.x, size.y, size.z);
-		if (maxAxis > 0) {
-			const scale = 3 / maxAxis;
-			cloned.scale.setScalar(scale);
-		}
-		return cloned;
-	}, [gltf.scene]);
+        const scene = useMemo(() => {
+                const cloned = gltf.scene.clone(true);
+                const box = new Box3().setFromObject(cloned);
+                const size = new Vector3();
+                const center = new Vector3();
+                box.getSize(size);
+                box.getCenter(center);
+                cloned.position.sub(center);
+                const maxAxis = Math.max(size.x, size.y, size.z);
+                if (maxAxis > 0) {
+                        const scale = 3 / maxAxis;
+                        cloned.scale.setScalar(scale);
+                }
+                return cloned;
+        }, [gltf.scene]);
 
-	return <primitive object={scene} dispose={null} />;
+        const faceControllers = useMemo<RobotFaceController[]>(() => createRobotFaceControllers(scene), [scene]);
+
+        useFrame((_, delta) => {
+                for (const controller of faceControllers) {
+                        controller.update(delta);
+                }
+        });
+
+        useEffect(
+                () => () => {
+                        for (const controller of faceControllers) {
+                                controller.dispose();
+                        }
+                },
+                [faceControllers]
+        );
+
+        return <primitive object={scene} dispose={null} />;
 });
 
 const DefaultPrimitive = memo(function DefaultPrimitive() {
