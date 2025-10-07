@@ -1,6 +1,6 @@
 import { Suspense, useMemo, useRef, type MutableRefObject } from 'react';
 import { Canvas, useLoader, useThree, useFrame } from '@react-three/fiber';
-import { AdaptiveDpr, MeshReflectorMaterial, OrbitControls, StatsGl } from '@react-three/drei';
+import { AdaptiveDpr, Html, MeshReflectorMaterial, OrbitControls, StatsGl } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { Box3, CubeTextureLoader, PerspectiveCamera, SRGBColorSpace, Vector3 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -10,7 +10,8 @@ interface ViewerCanvasProps {
 	modelUrl: string | null;
 }
 
-const CAMERA_POSITION: [number, number, number] = [4, 3, 6];
+const CAMERA_POSITION: [number, number, number] = [2.874, 1.813, -0.518];
+const CAMERA_TARGET: [number, number, number] = [0.526, 0.232, 0.723];
 
 const Model = memo(function Model({ url }: { url: string }) {
 	const gltf = useLoader(GLTFLoader, url);
@@ -78,7 +79,7 @@ const CubeEnvironment = memo(function CubeEnvironment() {
 
 const ReflectiveGround = memo(function ReflectiveGround() {
 	return (
-		<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+		<mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]} receiveShadow>
 			<planeGeometry args={[200, 200]} />
 			<MeshReflectorMaterial
 				blur={[250, 100]}
@@ -181,6 +182,62 @@ const KeyboardCameraController = memo(function KeyboardCameraController({
 	return null;
 });
 
+const CameraInfoOverlay = memo(function CameraInfoOverlay({
+														controlsRef
+													}: {
+	controlsRef: MutableRefObject<OrbitControlsImpl | null>;
+}) {
+	const { camera } = useThree();
+	const textRef = useRef<HTMLDivElement | null>(null);
+	const forwardRef = useRef(new Vector3());
+
+	useFrame(() => {
+		const container = textRef.current;
+		if (!container) {
+			return;
+		}
+		const controls = controlsRef.current;
+		const formatVec = (vec: Vector3) =>
+			`[${vec.x.toFixed(3)}, ${vec.y.toFixed(3)}, ${vec.z.toFixed(3)}]`;
+		const forward = forwardRef.current;
+		camera.getWorldDirection(forward);
+		forward.normalize();
+		const lines = [
+			`camera: ${formatVec(camera.position)}`,
+			controls ? `target: ${formatVec(controls.target)}` : 'target: —',
+			`direction: ${formatVec(forward)}`,
+			`up: ${formatVec(camera.up)}`,
+			controls
+				? `distance: ${camera.position.distanceTo(controls.target).toFixed(3)}`
+				: 'distance: —'
+		];
+		container.textContent = lines.join('\n');
+	});
+
+	return (
+		<Html transform={false} prepend>
+			<div
+				ref={textRef}
+				style={{
+					position: 'absolute',
+					top: '16px',
+					right: '16px',
+					minWidth: '240px',
+					padding: '12px',
+					borderRadius: '8px',
+					background: 'rgba(0, 0, 0, 0.65)',
+					color: '#e2e8f0',
+					fontFamily: 'monospace',
+					fontSize: '12px',
+					lineHeight: 1.5,
+					pointerEvents: 'none',
+					whiteSpace: 'pre'
+				}}
+			/>
+		</Html>
+	);
+});
+
 const LoaderFallback = () => (
 	<group>
 		<DefaultPrimitive />
@@ -195,7 +252,11 @@ export default function ViewerCanvas({ modelUrl }: ViewerCanvasProps) {
 	const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
 	return (
-		<Canvas shadows camera={{ position: CAMERA_POSITION, fov: 45, near: 0.1, far: 200 }}>
+		<Canvas
+			shadows
+			camera={{ position: CAMERA_POSITION, fov: 45, near: 0.1, far: 200 }}
+			style={{ width: '100%', height: '100%' }}
+		>
 			<AdaptiveDpr pixelated />
 			<Suspense fallback={<LoaderFallback />}>
 				<ambientLight intensity={0.5} />
@@ -216,10 +277,11 @@ export default function ViewerCanvas({ modelUrl }: ViewerCanvasProps) {
 				dampingFactor={0.05}
 				minDistance={1}
 				maxDistance={50}
-				target={[0, 0, 0]}
+				target={CAMERA_TARGET}
 			/>
 			<KeyboardCameraController controlsRef={controlsRef} />
-			<StatsGl className="!top-auto !bottom-2 !left-2" />
+			<CameraInfoOverlay controlsRef={controlsRef} />
+			{/*<StatsGl className="!top-auto !bottom-2 !left-2" />*/}
 		</Canvas>
 	);
 }

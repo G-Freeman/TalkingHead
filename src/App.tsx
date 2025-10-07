@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import JSZip from 'jszip';
 import ViewerCanvas from './components/ViewerCanvas';
-import ModelSourceSelector from './components/ModelSourceSelector';
-import ControlHints from './components/ControlHints';
+import JSZip from 'jszip';
 
 interface LoadedModel {
 	url: string | null;
@@ -12,9 +10,11 @@ interface LoadedModel {
 
 const FALLBACK_MODEL: LoadedModel = {
 	url: null,
-	name: 'Встроенный куб',
+	name: 'Модель не загружена',
 	isCustom: false
 };
+
+const DEFAULT_MODEL_CANDIDATES = ['default.zip', 'models/default.zip'] as const;
 
 type PreparedModel = {
 	url: string;
@@ -23,13 +23,13 @@ type PreparedModel = {
 };
 
 const toBasename = (path: string) => {
-	const normalized = path.replace(/\\/g, '/');
+	const normalized = path.replace(/\\\\/g, '/');
 	const segments = normalized.split('/');
 	return segments[segments.length - 1] || normalized;
 };
 
 const normalizeZipPath = (path: string) => {
-	const normalized = path.replace(/\\/g, '/');
+	const normalized = path.replace(/\\\\/g, '/');
 	const parts = normalized.split('/');
 	const stack: string[] = [];
 	for (const part of parts) {
@@ -125,6 +125,7 @@ const prepareModelSource = async (file: File): Promise<PreparedModel> => {
 
 export default function App() {
 	const [model, setModel] = useState<LoadedModel>(FALLBACK_MODEL);
+	const [status, setStatus] = useState<string | null>(null);
 	const activeUrlsRef = useRef<string[]>([]);
 
 	const releaseActiveUrls = useCallback(() => {
@@ -137,22 +138,18 @@ export default function App() {
 		activeUrlsRef.current = [];
 	}, []);
 
-	useEffect(() => {
-		return () => {
-			releaseActiveUrls();
-		};
-	}, [releaseActiveUrls]);
+	useEffect(() => () => releaseActiveUrls(), [releaseActiveUrls]);
 
 	const handleFile = useCallback(
 		async (file: File | null): Promise<void> => {
 			releaseActiveUrls();
-
 			if (!file) {
 				setModel(FALLBACK_MODEL);
+				setStatus('Модель не загружена');
 				return;
 			}
-
 			try {
+				setStatus('Обработка файла...');
 				const prepared = await prepareModelSource(file);
 				activeUrlsRef.current = prepared.objectUrls;
 				setModel({
@@ -160,64 +157,98 @@ export default function App() {
 					name: prepared.name,
 					isCustom: true
 				});
+				setStatus(null);
 			} catch (error) {
 				console.error(error);
 				activeUrlsRef.current = [];
-				const message = error instanceof Error ? error.message : 'Ошибка загрузки';
-				setModel({
-					url: null,
-					name: message,
-					isCustom: false
-				});
+				const message = error instanceof Error ? error.message : 'Ошибка загрузки модели';
+				setModel({ url: null, name: message, isCustom: false });
+				setStatus(message);
 			}
 		},
 		[releaseActiveUrls]
 	);
 
-	const resetToDefault = useCallback(() => {
-		void handleFile(null);
+	useEffect(() => {
+		let cancelled = false;
+		const loadDefault = async () => {
+			setStatus('Загрузка default.zip...');
+			let lastError: unknown = null;
+			for (const relativePath of DEFAULT_MODEL_CANDIDATES) {
+				try {
+					const response = await fetch(`${import.meta.env.BASE_URL}${relativePath}`);
+					if (!response.ok) {
+						throw new Error(
+							`Не удалось загрузить ${relativePath} (статус ${response.status})`
+						);
+					}
+					const blob = await response.blob();
+					if (cancelled) {
+						return;
+					}
+					const fileName = relativePath.split('/').pop() ?? 'default.zip';
+					const defaultFile = new File([blob], fileName, { type: 'application/zip' });
+					await handleFile(defaultFile);
+					return;
+				} catch (error) {
+					console.error(error);
+					lastError = error;
+				}
+			}
+			if (cancelled) {
+				return;
+			}
+			const message =
+				lastError instanceof Error
+					? lastError.message
+					: 'Не удалось загрузить модель по умолчанию';
+			setModel({ url: null, name: message, isCustom: false });
+			setStatus(message);
+		};
+		void loadDefault();
+		return () => {
+			cancelled = true;
+		};
 	}, [handleFile]);
 
-	const headerTitle = useMemo(
-		() => (model.isCustom ? `Модель: ${model.name}` : 'Быстрый просмотрщик GLTF'),
-		[model]
-	);
+	useEffect(() => {
+		const prevent = (event: DragEvent) => {
+			event.preventDefault();
+		};
+		const handleDropEvent = (event: DragEvent) => {
+			event.preventDefault();
+			const file = event.dataTransfer?.files?.[0] ?? null;
+			void handleFile(file);
+		};
+		window.addEventListener('dragover', prevent);
+		window.addEventListener('drop', handleDropEvent);
+		return () => {
+			window.removeEventListener('dragover', prevent);
+			window.removeEventListener('drop', handleDropEvent);
+		};
+	}, [handleFile]);
+
+	const overlayText = useMemo(() => {
+		if (status) {
+			return status;
+		}
+		if (!model.url) {
+			return 'Модель не загружена';
+		}
+		return model.name;
+	}, [status, model]);
 
 	return (
-		<div className="flex min-h-screen flex-col bg-surface">
-			<header className="border-b border-white/5 bg-surface/80 px-6 py-4 backdrop-blur">
-				<div className="mx-auto flex w-full max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-					<h1 className="text-xl font-semibold text-white sm:text-2xl">{headerTitle}</h1>
-					<button
-						type="button"
-						onClick={resetToDefault}
-						className="inline-flex items-center justify-center rounded-md border border-teal-500/40 px-3 py-1.5 text-sm font-medium text-teal-300 transition hover:border-teal-400 hover:text-teal-200"
-					>
-						Сбросить
-					</button>
+		<div className="flex h-screen w-screen flex-col bg-black text-white">
+			<div className="relative flex-1">
+				<ViewerCanvas modelUrl={model.url} />
+				<div className="pointer-events-none absolute left-4 top-4 rounded-md bg-black/60 px-3 py-1 text-xs uppercase tracking-wide">
+					{overlayText}
 				</div>
-			</header>
-			<main className="mx-auto flex w-full max-w-6xl grow flex-col gap-6 px-6 py-6 lg:flex-row">
-				<section className="flex grow basis-2/3 flex-col overflow-hidden rounded-2xl border border-white/5 bg-panel shadow-xl">
-					<div className="relative h-full min-h-[400px] grow">
-						<ViewerCanvas modelUrl={model.url} />
-						<div className="pointer-events-none absolute left-4 top-4 rounded-md bg-black/40 px-3 py-1 text-xs uppercase tracking-wide text-gray-200">
-							{model.isCustom ? model.name : 'Встроенный примитив'}
-						</div>
-					</div>
-				</section>
-				<aside className="flex basis-1/3 flex-col gap-4">
-					<ModelSourceSelector onSelect={handleFile} />
-					<ControlHints modelName={model.name} isCustomModel={model.isCustom} />
-					<div className="rounded-lg border border-white/10 bg-panel/80 p-4 text-xs text-gray-400">
-						<p>
-							Просмотрщик поддерживает загрузку glTF/glb файлов размером до нескольких сотен мегабайт
-							(ограничено памятью браузера). Для максимальной производительности используйте бинарный формат
-							glb и включите сжатие текстур.
-						</p>
-					</div>
-				</aside>
-			</main>
+				<div className="pointer-events-none absolute left-4 bottom-4 rounded-md bg-black/60 px-3 py-1 text-xs text-gray-300">
+					Перетащите .glb/.gltf или .zip на окно, чтобы заменить модель
+				</div>
+			</div>
 		</div>
 	);
 }
