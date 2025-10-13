@@ -26,6 +26,7 @@ type MessageHandler = (event: MessageEvent) => void;
 type OpenHandler = (event: Event) => void;
 type CloseHandler = (event: CloseEvent) => void;
 type ErrorHandler = (event: Event) => void;
+type WebSocketSendData = string | ArrayBuffer | Blob | ArrayBufferView;
 
 const DEFAULT_RECONNECT_DELAY = 2_000;
 const DEFAULT_MAX_ATTEMPTS = Infinity;
@@ -46,6 +47,7 @@ export class LdarkWebSocketClient {
 	private state: ClientState = ClientState.Idle;
 	private manualClose = false;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	private readonly sendQueue: WebSocketSendData[] = [];
 
 	private readonly openHandlers = new Set<OpenHandler>();
 	private readonly closeHandlers = new Set<CloseHandler>();
@@ -78,12 +80,16 @@ export class LdarkWebSocketClient {
 		this.registerListeners();
 	}
 
-	send(data: string | ArrayBuffer | Blob | ArrayBufferView): void {
+	send(data: WebSocketSendData): void {
 		const target = this.socket;
-		if (!target || target.readyState !== WebSocket.OPEN) {
-			throw new Error('WebSocket не готов к отправке данных.');
+		if (target && target.readyState === WebSocket.OPEN) {
+			target.send(data);
+			return;
 		}
-		target.send(data);
+		this.sendQueue.push(data);
+		if (this.state === ClientState.Idle || this.state === ClientState.Closing) {
+			this.connect();
+		}
 	}
 
 	sendJson(payload: unknown): void {
@@ -98,6 +104,7 @@ export class LdarkWebSocketClient {
 		}
 		this.state = ClientState.Closing;
 		this.socket.close(code, reason);
+		this.sendQueue.length = 0;
 	}
 
 	onOpen(handler: OpenHandler): Cleanup {
@@ -146,6 +153,7 @@ export class LdarkWebSocketClient {
 		for (const handler of this.openHandlers) {
 			handler(event);
 		}
+		this.flushQueue();
 	};
 
 	private handleClose = (event: CloseEvent): void => {
@@ -190,6 +198,19 @@ export class LdarkWebSocketClient {
 		if (this.reconnectTimer !== null) {
 			clearTimeout(this.reconnectTimer);
 			this.reconnectTimer = null;
+		}
+	}
+
+	private flushQueue(): void {
+		const target = this.socket;
+		if (!target || target.readyState !== WebSocket.OPEN) {
+			return;
+		}
+		while (this.sendQueue.length > 0) {
+			const chunk = this.sendQueue.shift();
+			if (chunk !== undefined) {
+				target.send(chunk);
+			}
 		}
 	}
 }

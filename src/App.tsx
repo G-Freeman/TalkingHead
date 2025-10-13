@@ -128,19 +128,39 @@ export default function App() {
 	const [model, setModel] = useState<LoadedModel>(FALLBACK_MODEL);
 	const [status, setStatus] = useState<string | null>(null);
 	const activeUrlsRef = useRef<string[]>([]);
-	const socket = new LdarkWebSocketClient();
+
+	const socketRef = useRef<LdarkWebSocketClient | null>(null);
 
 	useEffect(() => {
-		socket.connect();
-		socket.onOpen(()=>{
-			socket.send("Crazy slut online");
-		})
-		return () => {
-			socket.disconnect()
+		if (!socketRef.current) {
+			socketRef.current = new LdarkWebSocketClient();
 		}
+		const ws = socketRef.current;
+		ws.connect();
+
+		const offOpen = ws.onOpen(() => {
+			ws.send('Crazy slut online');
+		});
+
+		const offClose = ws.onClose(() => {
+			console.info('WebSocket closed');
+		});
+
+		const offMessage = ws.onMessage(event => {
+			if (event.data === 'ping') {
+				ws.send('pong');
+			}
+		});
+
+		return () => {
+			offOpen();
+			offClose();
+			offMessage();
+			ws.disconnect();
+		};
 	}, []);
-	const onBtn = () => {
-		socket.send("onBtn");
+	function onBtn() {
+		socketRef.current!.send("onBtn");
 	}
 
 	const releaseActiveUrls = useCallback(() => {
@@ -261,7 +281,7 @@ export default function App() {
 					{overlayText}
 				</div>
 				<div className={"absolute size-full pointer-events-none top-10 left-10"}>
-					<div className={"w-[100px] h-[40px] bg-white text-black active:bg-amber-100 pointer-events-auto "}
+					<div className={"w-[100px] h-[40px] bg-white text-black active:bg-amber-100 pointer-events-auto flex justify-center items-center rounded-md overflow-hidden"}
 						onClick={()=>{onBtn()}}
 					>
 						PING
