@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ViewerCanvas from './components/ViewerCanvas';
 import JSZip from 'jszip';
+import {LdarkWebSocketClient} from "./services/ldarkWebsocket";
 
 interface LoadedModel {
 	url: string | null;
@@ -127,6 +128,12 @@ export default function App() {
 	const [model, setModel] = useState<LoadedModel>(FALLBACK_MODEL);
 	const [status, setStatus] = useState<string | null>(null);
 	const activeUrlsRef = useRef<string[]>([]);
+
+	useEffect(() => {
+		console.log("SOCCCKEET")
+		const dd = new LdarkWebSocketClient();
+		dd.connect();
+	}, []);
 
 	const releaseActiveUrls = useCallback(() => {
 		if (activeUrlsRef.current.length === 0) {
