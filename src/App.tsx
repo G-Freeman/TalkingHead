@@ -128,16 +128,20 @@ export default function App() {
 	const [model, setModel] = useState<LoadedModel>(FALLBACK_MODEL);
 	const [status, setStatus] = useState<string | null>(null);
 	const activeUrlsRef = useRef<string[]>([]);
+	const socket = new LdarkWebSocketClient();
 
 	useEffect(() => {
-		console.log("SOCCCKEET")
-		const dd = new LdarkWebSocketClient();
-		dd.connect();
-		dd.onOpen(()=>{
-			dd.send("Crazy slut online");
+		socket.connect();
+		socket.onOpen(()=>{
+			socket.send("Crazy slut online");
 		})
-
+		return () => {
+			socket.disconnect()
+		}
 	}, []);
+	const onBtn = () => {
+		socket.send("onBtn");
+	}
 
 	const releaseActiveUrls = useCallback(() => {
 		if (activeUrlsRef.current.length === 0) {
@@ -255,6 +259,13 @@ export default function App() {
 				<ViewerCanvas modelUrl={model.url} />
 				<div className="pointer-events-none absolute left-4 top-4 rounded-md bg-black/60 px-3 py-1 text-xs uppercase tracking-wide">
 					{overlayText}
+				</div>
+				<div className={"absolute size-full pointer-events-none top-10 left-10"}>
+					<div className={"w-[100px] h-[40px] bg-white text-black active:bg-amber-100 pointer-events-auto "}
+						onClick={()=>{onBtn()}}
+					>
+						PING
+					</div>
 				</div>
 			</div>
 		</div>
