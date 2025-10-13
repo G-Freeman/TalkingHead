@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ViewerCanvas from './components/ViewerCanvas';
 import JSZip from 'jszip';
 import {LdarkWebSocketClient} from "./services/ldarkWebsocket";
+import { streamLdarkTts } from './services/ldarkTts';
 
 interface LoadedModel {
 	url: string | null;
@@ -127,9 +128,31 @@ const prepareModelSource = async (file: File): Promise<PreparedModel> => {
 export default function App() {
 	const [model, setModel] = useState<LoadedModel>(FALLBACK_MODEL);
 	const [status, setStatus] = useState<string | null>(null);
+	const [isTtsPending, setIsTtsPending] = useState(false);
 	const activeUrlsRef = useRef<string[]>([]);
 
 	const socketRef = useRef<LdarkWebSocketClient | null>(null);
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const ttsUrlRef = useRef<string | null>(null);
+
+	const ensureAudioContext = useCallback((): AudioContext => {
+		if (typeof window === 'undefined') {
+			throw new Error('AudioContext доступен только в браузере.');
+		}
+		const existing = audioContextRef.current;
+		if (existing) {
+			return existing;
+		}
+		const AudioContextCtor =
+			window.AudioContext ??
+			(window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+		if (!AudioContextCtor) {
+			throw new Error('AudioContext не поддерживается в этом браузере.');
+		}
+		const context = new AudioContextCtor();
+		audioContextRef.current = context;
+		return context;
+	}, []);
 
 	useEffect(() => {
 		if (!socketRef.current) {
@@ -163,6 +186,50 @@ export default function App() {
 		socketRef.current!.send("onBtn");
 	}
 
+	async function onBtnTts(text:string = 'Привет! Добро пожаловать...') {
+		if (isTtsPending) {
+			return;
+		}
+		setIsTtsPending(true);
+		try {
+			const context = ensureAudioContext();
+			if (context.state === 'suspended') {
+				await context.resume();
+			}
+			if (ttsUrlRef.current) {
+				URL.revokeObjectURL(ttsUrlRef.current);
+				ttsUrlRef.current = null;
+			}
+			const result = await streamLdarkTts({
+				text,
+				speaker: 'kseniya',
+				audioContext: context
+			});
+			const objectUrl = URL.createObjectURL(result.blob);
+			ttsUrlRef.current = objectUrl;
+			const audio = new Audio(objectUrl);
+			audio.addEventListener(
+				'ended',
+				() => {
+					if (ttsUrlRef.current === objectUrl) {
+						URL.revokeObjectURL(objectUrl);
+						ttsUrlRef.current = null;
+					}
+				},
+				{ once: true }
+			);
+			audio.play().catch((playError) => {
+				console.error('Не удалось воспроизвести TTS', playError);
+			});
+			console.debug('Получено кадров огибающей:', result.envelope.values.length);
+		} catch (error) {
+			console.error('Ошибка при запросе TTS', error);
+		}
+		finally {
+			setIsTtsPending(false);
+		}
+	}
+
 	const releaseActiveUrls = useCallback(() => {
 		if (activeUrlsRef.current.length === 0) {
 			return;
@@ -174,6 +241,15 @@ export default function App() {
 	}, []);
 
 	useEffect(() => () => releaseActiveUrls(), [releaseActiveUrls]);
+
+	useEffect(() => {
+		return () => {
+			if (ttsUrlRef.current) {
+				URL.revokeObjectURL(ttsUrlRef.current);
+				ttsUrlRef.current = null;
+			}
+		};
+	}, []);
 
 	const handleFile = useCallback(
 		async (file: File | null): Promise<void> => {
@@ -273,6 +349,11 @@ export default function App() {
 		return model.name;
 	}, [status, model]);
 
+	const ttlBtns = [
+		{label:'Привет', text:['И тебе привет!', 'Здрасте', 'Ппприивв', 'Чоо. Есть чо?', 'Здравствуйте, мой эщкере', 'Арбууузыы!'], },
+		{label:'Как дела?', text:['Сам дела, кусок говна', 'Норм', 'Куршавель', 'Гигатератысяча раз лучше твоего существования'], },
+	]
+
 	return (
 		<div className="flex h-screen w-screen flex-col bg-black text-white">
 			<div className="relative flex-1">
@@ -281,11 +362,21 @@ export default function App() {
 					{overlayText}
 				</div>
 				<div className={"absolute size-full pointer-events-none top-10 left-10"}>
-					<div className={"w-[100px] h-[40px] bg-white text-black active:bg-amber-100 pointer-events-auto flex justify-center items-center rounded-md overflow-hidden"}
-						onClick={()=>{onBtn()}}
-					>
-						PING
+					<div className={"pointer-events-auto flex flex-col gap-2"}>
+						<div className={"w-[100px] h-[40px] bg-white text-black active:bg-amber-100 pointer-events-auto flex justify-center items-center rounded-md overflow-hidden"}
+							onClick={() => {onBtn();}}
+						>PING</div>
+						{ ttlBtns.map((el)=>{
+							return <div className={`w-[100px] h-[40px] bg-white text-black active:bg-amber-100 flex justify-center items-center rounded-md overflow-hidden transition-opacity ${isTtsPending ? 'pointer-events-none opacity-60 cursor-not-allowed' : 'pointer-events-auto'}`}
+								onClick={() => {
+									const randomIndex = Math.floor(Math.random() * el.text.length);
+									void onBtnTts(el.text[randomIndex]);
+								}}
+								aria-disabled={isTtsPending}
+							>{el.label}</div>
+						})}
 					</div>
+					{/*	UI */}
 				</div>
 			</div>
 		</div>

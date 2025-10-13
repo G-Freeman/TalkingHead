@@ -1,6 +1,8 @@
 // src/services/ldarkWebSocket.ts
 const DEFAULT_WS_URL = 'wss://ldark-star.ru/ws' as const;
-const TTS_ENDPOINT = 'https://ldark-star.ru/api/tts' as const;
+const DEFAULT_TTS_ENDPOINT = 'https://ldark-star.ru/api/tts';
+const DEV_TTS_ENDPOINT = '/ldark-api/api/tts';
+export const TTS_ENDPOINT = import.meta.env.DEV ? DEV_TTS_ENDPOINT : DEFAULT_TTS_ENDPOINT;
 
 export const LDARK_SPEAKERS = [
 	'aidar',
