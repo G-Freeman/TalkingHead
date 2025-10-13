@@ -133,6 +133,10 @@ export default function App() {
 		console.log("SOCCCKEET")
 		const dd = new LdarkWebSocketClient();
 		dd.connect();
+		dd.onOpen(()=>{
+			dd.send("Crazy slut online");
+		})
+
 	}, []);
 
 	const releaseActiveUrls = useCallback(() => {
